@@ -25,9 +25,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createElement } from 'react'
 import clsx from 'clsx'
-import { IconCheckOutline16, IconFolderOpen16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCheckOutline16, IconDownloadOutline16, IconFolderOpen16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../context-types.ts'
-import { api, mediaUrl, type SessionScope } from './api.ts'
+import { api, downloadUrl, mediaUrl, type SessionScope } from './api.ts'
 import { BinaryDownload } from './binary-download.tsx'
 import { planFirstMatch, planFsReadOutcome, type EditorLoadAction } from './editor-load.ts'
 import { baseName } from './FileTree.tsx'
@@ -383,6 +383,17 @@ export function EditorHost(props: {
         )}
         {saveLabel !== '' && (
           <span className={clsx(css.editorStatus, toolbar?.saveState === 'failed' && css.editorStatusError)}>{saveLabel}</span>
+        )}
+        {!showEmpty && (
+          <a
+            className={css.iconButton}
+            href={downloadUrl(scope, path)}
+            download
+            aria-label={t('download')}
+            title={t('download')}
+          >
+            <IconDownloadOutline16 size={14} />
+          </a>
         )}
         <button
           type="button"

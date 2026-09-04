@@ -360,6 +360,7 @@ body[data-dsh-sidebar-dragging] .bottomPanel {
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
   flex: none;
+  text-decoration: none;
 }
 
 .iconButton:hover:not(:disabled) {

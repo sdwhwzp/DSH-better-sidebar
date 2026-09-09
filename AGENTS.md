@@ -7,6 +7,7 @@
 
 ## 1. 仓库硬约束（必须遵守）
 
+- **个人 fork 同步**：本检出的 `sdwhwzp/DSH-better-sidebar` 遵守 [DSH fork 项目约束](../AGENTS.md)，从原作者仓库读取更新，合并到当前分支、优先采用源实现并完成适配，检查后上传全部未上传本地分支并再次核对。下述原作者的 PR 流程不要求个人 fork 为这项同步切换到其他分支或向原作者仓库推送。
 - **禁止修改 DSH 源码**：对官方 checkout（`~/.dsh/source/current`）零写入。
 - **代码改动必须走 PR**：非文档改动在 `feat/*` / `fix/*` 分支开发，`gh pr create` 发起，review 合并后进 main；**仅纯文档改动**（README / AGENTS.md / docs/）允许直推 main。
 - **挂载只走 `cordis.patch.yml` + profile 机制**（`~/.dsh/profiles/<profile>/`），插件作为独立包被 profile 引用，不反向侵入 DSH。

@@ -49,6 +49,25 @@ interface FakeContext {
   get: (key: string) => undefined
 }
 
+/** Real PTYs with an owned stdin-driven process and observable teardown. */
+function quotaPtys(max: number) {
+  const manager = new PtyManager(process.execPath, max, ['-e', 'process.stdin.on("data", () => process.exit(0)); process.stdin.resume()'])
+  const exits: Promise<void>[] = []
+  return {
+    manager,
+    open(session: string, tab: string) {
+      const handle = manager.open(session, tab, process.cwd(), 80, 24)
+      const exited = new Promise<void>(resolve => { handle.pty.onExit(() => { resolve() }) })
+      exits.push(exited)
+      return { handle, exited }
+    },
+    async dispose() {
+      manager.disposeAll()
+      await Promise.all(exits)
+    },
+  }
+}
+
 /**
  * The login-shell test spawns a real pty whose bash may still be writing to
  * the temp HOME (history files, etc.) when `disposeAll()` returns — `close()`
@@ -211,49 +230,45 @@ describe('host plugin smoke', () => {
   })
 
   it('pty manager releases the quota on close and respawns after exit', async () => {
-    const manager = new PtyManager(defaultShell(), 3)
+    const fixture = quotaPtys(3)
+    const { manager } = fixture
     try {
-      const first = manager.open('s1', 't1', process.cwd(), 80, 24)
+      const first = fixture.open('s1', 't1')
       expect(manager.keysOf('s1')).toHaveLength(1)
       // Tab-close semantics (close frame): quota released immediately.
-      manager.scheduleClose(first.key, 0)
-      await new Promise(resolve => setTimeout(resolve, 50))
+      manager.scheduleClose(first.handle.key, 0)
+      await first.exited
       expect(manager.keysOf('s1')).toHaveLength(0)
       // Reopen spawns a fresh process.
-      const second = manager.open('s1', 't1', process.cwd(), 80, 24)
-      expect(second).not.toBe(first)
+      const second = fixture.open('s1', 't1')
+      expect(second.handle).not.toBe(first.handle)
       expect(manager.keysOf('s1')).toHaveLength(1)
       // After the shell exits, a reconnect respawns instead of reusing the dead handle.
-      second.pty.write('exit\r')
-      const deadline = Date.now() + 5000
-      while (!second.exited && Date.now() < deadline) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
-      expect(second.exited).toBe(true)
-      const third = manager.open('s1', 't1', process.cwd(), 80, 24)
-      expect(third.exited).toBe(false)
-      expect(third).not.toBe(second)
+      second.handle.pty.write('exit\r')
+      await second.exited
+      expect(second.handle.exited).toBe(true)
+      const third = fixture.open('s1', 't1')
+      expect(third.handle.exited).toBe(false)
+      expect(third.handle).not.toBe(second.handle)
     } finally {
-      manager.disposeAll()
+      await fixture.dispose()
     }
   })
 
   it('pty manager: exited zombie handles do not consume the quota', async () => {
-    const manager = new PtyManager(defaultShell(), 1)
+    const fixture = quotaPtys(1)
+    const { manager } = fixture
     try {
-      const first = manager.open('s3', 't1', process.cwd(), 80, 24)
-      first.pty.write('exit\r')
-      const deadline = Date.now() + 5000
-      while (!first.exited && Date.now() < deadline) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
-      expect(first.exited).toBe(true)
+      const first = fixture.open('s3', 't1')
+      first.handle.pty.write('exit\r')
+      await first.exited
+      expect(first.handle.exited).toBe(true)
       // Quota is 1; the exited handle is swept, so a NEW tab can still spawn.
-      const second = manager.open('s3', 't2', process.cwd(), 80, 24)
-      expect(second.exited).toBe(false)
+      const second = fixture.open('s3', 't2')
+      expect(second.handle.exited).toBe(false)
       expect(manager.keysOf('s3')).toHaveLength(1)
     } finally {
-      manager.disposeAll()
+      await fixture.dispose()
     }
   })
 

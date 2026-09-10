@@ -166,6 +166,29 @@ describe('turn-tail interception registration (issue #15)', () => {
     restore()
   })
 
+  it('leaves write-and-present and Bash deliveries to the native cards', () => {
+    const fake = fakeSlots(true)
+    const restore = registerTurnTailInterception(clientCtx(fake.slots), createSidebarStore())
+    const select = fake.registered[0]!.options.select as (owner: unknown) => unknown
+    for (const produced of [[], [{ seq: 3, path: 'report.md' }]]) {
+      const data = { produced, presented: [{ seq: 5, index: 0, path: 'report.md', description: 'Report' }] }
+      const owner = { turn: { data: { get: () => data } }, seq: 6 }
+      expect(select(owner)).toBeNull()
+    }
+    restore()
+  })
+
+  it('keeps earlier replies and modification-only turns on the sidebar row', () => {
+    const fake = fakeSlots(true)
+    const restore = registerTurnTailInterception(clientCtx(fake.slots), createSidebarStore())
+    const select = fake.registered[0]!.options.select as (owner: unknown) => unknown
+    for (const presented of [[], [{ seq: 8, index: 0, path: 'report.md' }]]) {
+      const data = { produced: [{ seq: 3, path: 'report.md' }], presented }
+      expect(select({ turn: { data: { get: () => data } }, seq: 6 })).toEqual(['report.md'])
+    }
+    restore()
+  })
+
   it('wires the openInSidebar and onShowInFolder seats', () => {
     const fake = fakeSlots(true)
     const ctx = clientCtx(fake.slots)

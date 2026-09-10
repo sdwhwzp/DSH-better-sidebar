@@ -1,5 +1,7 @@
 # dsh-better-sidebar
 
+When the model explicitly delivers files with `present`, this plugin preserves the native DSH delivery cards with file names, descriptions, and open actions, including turns that also write files. Card clicks use the current sidebar file viewer. Modification-only turns retain the plugin’s changed-file row.
+
 <!-- Hero -->
 <div align="center">
   <b style="font-size: 1.15em;">A service-oriented sidebar framework, and a complete workbench out of the box</b><br /><br />

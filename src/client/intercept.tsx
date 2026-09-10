@@ -1,10 +1,6 @@
 /**
- * Interception of the chat's produced-files row: the turn-tail chain entry
- * that replaces ui-deliverables' row when the closing turn produced files.
- * The takeover looks identical (same chip row); the chips open the file in
- * the sidebar instead of the host OS. Priority -1 runs before the default-0
- * deliverables entry; when nothing was produced the selector returns null
- * and the original row renders unchanged.
+ * Route modified-file chips to the sidebar. Turns with explicit `present`
+ * deliveries fall through to the native row, which owns their cards and actions.
  */
 import { IconCodeOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Context } from '../context-types.ts'

@@ -50,6 +50,17 @@ beforeEach(() => {
 })
 
 describe('MermaidMarkdown', () => {
+  it('unmounts diagram roots without interrupting the parent React render', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { root } = await renderMarkdown('```mermaid\ngraph TD\n  A-->B\n```')
+      await unmount(root)
+      expect(errors.mock.calls.filter(args => String(args[0]).includes('synchronously unmount a root'))).toEqual([])
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
   it('swaps the mermaid code block for a rendered diagram', async () => {
     const { container, root } = await renderMarkdown('```mermaid\ngraph TD\n  A-->B\n```')
     const diagram = container.querySelector('[data-mermaid-diagram] svg')

@@ -314,6 +314,11 @@ interface MermaidMount {
   removed: ChildNode[]
 }
 
+/** React cannot unmount another root during a parent commit. */
+function unmountDiagram(root: Root): void {
+  queueMicrotask(() => { root.unmount() })
+}
+
 /**
  * True when a rendered CodeBlock is a mermaid fence. The DSH CodeBlock has
  * two bodies: the shiki path carries the `language-*` class on generated
@@ -359,7 +364,7 @@ export function MermaidMarkdown({ text, codeLabels }: MermaidMarkdownProps): Rea
         // restore the CodeBlock children React still manages, so the plain
         // fence renders normally again.
         if (mount !== undefined) {
-          mount.root.unmount()
+          unmountDiagram(mount.root)
           block.replaceChildren(...mount.removed)
           block.removeAttribute('data-mermaid-processed')
           mounts.delete(block)
@@ -388,13 +393,13 @@ export function MermaidMarkdown({ text, codeLabels }: MermaidMarkdownProps): Rea
     // restructured): the host node is gone with it.
     for (const [block, mount] of mounts) {
       if (seen.has(block)) continue
-      mount.root.unmount()
+      unmountDiagram(mount.root)
       mounts.delete(block)
     }
   }, [text])
 
   useEffect(() => () => {
-    for (const { root } of mountsRef.current.values()) root.unmount()
+    for (const { root } of mountsRef.current.values()) unmountDiagram(root)
     mountsRef.current.clear()
   }, [])
 

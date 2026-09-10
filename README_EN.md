@@ -1,5 +1,8 @@
 # dsh-better-sidebar
 
+> [!IMPORTANT]
+> **Built on DSH's native sidebar API** (since v0.19.0, DSH `0.1.5-rc.1+`): the right column *is* DSH's own sidebar — every plugin tab type and tab body registers and opens through `ctx.sidebarRightTabs` / `ctx.sidebarRight`, every file open from the chat goes through `ctx.sidebarRight.openResource('dsh-resource://file/…')`, and the plugin **no longer draws a right panel of its own** (the old free-window capability is gone with it). The self-drawn bottom workbench and the `ctx.betterSidebar` service other plugins register against are unchanged — see the [plugin integration guide](docs/external-plugin-guide.md).
+
 When the model explicitly delivers files with `present`, this plugin preserves the native DSH delivery cards with file names, descriptions, and open actions, including turns that also write files. Card clicks use the current sidebar file viewer. Modification-only turns retain the plugin’s changed-file row.
 
 <!-- Hero -->

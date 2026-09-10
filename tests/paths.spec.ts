@@ -4,6 +4,13 @@ import { resolveSidebarPath } from '../src/client/produced-files.ts'
 import { htmlUrl } from '../src/client/api.ts'
 
 describe('path helpers', () => {
+  it('keeps relative HTML assets under the resolved Windows session path', () => {
+    const route = htmlUrl({ sessionId: 's', cwd: 'C:/users/u3' }, 'delivery/preview.html')
+    expect(route).toBe('/sidebar/html/s/C%3A/users/u3/delivery/preview.html')
+    expect(new URL('./style.css', 'http://localhost' + route).pathname)
+      .toBe('/sidebar/html/s/C%3A/users/u3/delivery/style.css')
+  })
+
   it('derives relative paths under the cwd (and "." for the cwd itself)', () => {
     expect(relativeTo('/Users/me/code', '/Users/me/code/src/main.ts')).toBe('src/main.ts')
     expect(relativeTo('/Users/me/code', '/Users/me/code')).toBe('.')

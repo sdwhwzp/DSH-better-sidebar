@@ -41,6 +41,16 @@ function viewerProps(store: ReturnType<typeof createSidebarStore>, overrides: Pa
 }
 
 describe('HTML preview iframe sandbox', () => {
+  it('resolves a delivered relative file inside the session workspace', () => {
+    const html = renderToString(createElement(TextEditor, viewerProps(createSidebarStore(), {
+      scope: { sessionId: 's1', cwd: '/users/u3' },
+      path: 'delivery/preview.html',
+    })))
+    const iframe = /<iframe[^>]*>/.exec(html)?.[0]
+    expect(iframe).toContain('src="/sidebar/html/s1/users/u3/delivery/preview.html"')
+    expect(iframe).toContain(`sandbox="${HTML_IFRAME_SANDBOX}"`)
+  })
+
   it('renders the preview iframe with the exact sandbox tokens and no same-origin / top-navigation', () => {
     const store = createSidebarStore()
     const html = renderToString(createElement(TextEditor, viewerProps(store)))

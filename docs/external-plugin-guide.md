@@ -923,3 +923,9 @@ better-sidebar 的内置 tab 和 viewer 就是参考实现（"吃狗粮"），�
 通过 `ctx.betterSidebar` 的三方插件 [dsh-sidebar-qa](https://github.com/ChenRuoT/dsh-sidebar-qa) —— 基于 better-sidebar 的划选提问：对话划选 → 右侧面板提问 → 同工作区独立追问会话（❓追问·主题）；快速无思考模型压缩主对话上下文后与引文一起注入，不打断主对话；追问可嵌套、可继续、可归档。
 
 更多插件接入后欢迎在此登记（一句话 + 链接）。
+
+## Host 配对文件适配
+
+Host 可提供可选服务 `localWorkspaceFiles`，方法为 `sidebar(method, payload, request, signal): Promise<{ value: unknown } | undefined>`。`request.headers` 保留认证网关的完整请求头，由提供者校验账号、会话和目录权限；`undefined` 表示普通服务器工作区，继续使用内置文件接口，拒绝与离线错误不得降级读取服务器占位目录。
+
+`fs.tree`、`fs.search`、`fs.read` 使用现有 JSON 响应；`fs.bytes` 返回 Buffer，供图片、PDF、下载、HTML 及其相对资源使用，大小限制和 HTML 沙箱响应头继续生效。`fs.write`、`fs.rename`、`fs.remove` 与 `fs.upload` 也先经过提供者，未支持的本机写操作必须拒绝，不能落到占位目录。插件不自行解析账号 Cookie 或持有本机凭据。

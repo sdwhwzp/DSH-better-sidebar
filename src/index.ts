@@ -34,6 +34,7 @@ import { resolveSessionPath } from './session-path.ts'
 import { renameWorkspaceEntry, removeWorkspaceEntry, writeWorkspaceUpload } from './fs-operations.ts'
 import { ensureWorkspacePath, ensureWorkspaceWritePath } from './path-security.ts'
 import { searchFiles } from './fs-search.ts'
+import { pairedFileApi } from './paired-files.ts'
 import { decodeHtmlUrl } from './html-route.ts'
 import { extractFrameAncestors } from './browser-probe.ts'
 import { isTrustedApiRequest, isLoopbackHostname } from './trust-fence.ts'
@@ -894,7 +895,8 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         if (handler === undefined) {
           throw new SidebarError('not-found', `unknown sidebar API method "${method}"`, 404)
         }
-        writeOk(res, await handler(payload))
+        const paired = await pairedFileApi(ctx, method, payload, req)
+        writeOk(res, paired === undefined ? await handler(payload) : paired.value)
       } catch (error) {
         writeError(res, error)
       }
@@ -928,6 +930,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
           throw new SidebarError('bad-request', 'sessionId, dir, and relativePath are required')
         }
         const cwd = await sessionCwdOf(ctx, sessionId, url.searchParams.get('cwd') ?? undefined)
+        await pairedFileApi(ctx, 'fs.upload', { sessionId, path: dir }, req)
         const { path, size } = await writeWorkspaceUpload({
           cwd,
           dir,
@@ -970,13 +973,15 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         const raw = url.searchParams.get('path')
         if (sessionId === null || raw === null) throw new SidebarError('bad-request', 'sessionId and path are required')
         const cwd = await sessionCwdOf(ctx, sessionId, url.searchParams.get('cwd') ?? undefined)
-        const path = await ensureWorkspacePath(cwd, raw, fenceEnabledOf(() => settingsFace))
-        const info = await stat(path)
-        if (!info.isFile() || info.size > resolved.mediaLimit) {
+        const paired = await pairedFileApi(ctx, 'fs.bytes', { sessionId, path: raw }, req)
+        const path = paired === undefined ? await ensureWorkspacePath(cwd, raw, fenceEnabledOf(() => settingsFace)) : raw
+        const info = paired === undefined ? await stat(path) : undefined
+        if (info !== undefined && (!info.isFile() || info.size > resolved.mediaLimit)) {
           throw new SidebarError('fs-error', 'not a file or too large', 400)
         }
         const type = mediaTypeForPath(path)
-        const body = await readFile(path)
+        const body = paired === undefined ? await readFile(path) : paired.value as Buffer
+        if (body.length > resolved.mediaLimit) throw new SidebarError('too-large', 'file exceeds media limit', 400)
         // Raw bytes either way (binary-safe); ?download=1 switches the
         // disposition so the browser saves the file instead of showing it.
         const headers: Record<string, string> = { 'content-type': type, 'cache-control': 'no-cache' }
@@ -1029,13 +1034,15 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         // real-path guard, with the same semantics as the media route's
         // fallback.
         const cwd = await sessionCwdOf(ctx, sessionId)
-        const absolute = await ensureWorkspacePath(cwd, path, fenceEnabledOf(() => settingsFace))
-        const info = await stat(absolute)
-        if (!info.isFile() || info.size > resolved.mediaLimit) {
+        const paired = await pairedFileApi(ctx, 'fs.bytes', { sessionId, path }, req)
+        const absolute = paired === undefined ? await ensureWorkspacePath(cwd, path, fenceEnabledOf(() => settingsFace)) : path
+        const info = paired === undefined ? await stat(absolute) : undefined
+        if (info !== undefined && (!info.isFile() || info.size > resolved.mediaLimit)) {
           throw new SidebarError('fs-error', 'not a file or too large', 400)
         }
         const type = mediaTypeForPath(absolute)
-        const body = await readFile(absolute)
+        const body = paired === undefined ? await readFile(absolute) : paired.value as Buffer
+        if (body.length > resolved.mediaLimit) throw new SidebarError('too-large', 'file exceeds media limit', 400)
         res.writeHead(200, {
           'content-type': type === 'text/html' ? 'text/html; charset=utf-8' : type,
           'cache-control': 'no-cache',

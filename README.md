@@ -671,3 +671,7 @@ Windows / Linux / macOS 三平台适配（macOS 日常验证；其余经单元�
 <div align="center">
   <sub>MIT License · Built for the <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a> ecosystem · 在 <a href="https://github.com/topics/dsh-better-sidebar">topic dsh-better-sidebar</a> 发现更多生态插件</sub>
 </div>
+
+## 配对本机目录
+
+配合新版 dsh-passwords 与桌面端 0.1.2，文件面板通过当前账号的目录连接列出、搜索和预览本机文件；图片、PDF、HTML 与相对资源使用同一授权通道。断开连接或切换账号后无法读取原账号文件。当前面板的上传、保存、重命名与删除不支持配对目录，修改请交给 Agent 文件工具；服务器工作区保留原功能。接口见 [Host 配对文件适配](docs/external-plugin-guide.md#host-配对文件适配)。

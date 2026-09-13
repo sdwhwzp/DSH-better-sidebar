@@ -220,8 +220,25 @@ describe('EditorHost (files window)', () => {
     const { container, unmount } = mountHost(ctx, store, fileTab)
     try {
       expect(container.querySelector('input[placeholder^="File path"]')).not.toBeNull()
+      const download = container.querySelector<HTMLAnchorElement>('a[aria-label="Download"]')
+      expect(download).not.toBeNull()
+      expect(download?.getAttribute('href')).toBe(
+        '/sidebar/file?sessionId=editor-home-session&path=%2Ftmp%2Fa.ts&download=1',
+      )
+      expect(download?.hasAttribute('download')).toBe(true)
       expect(container.querySelector('button[aria-pressed]')?.getAttribute('aria-pressed')).toBe('true')
       expect(container.querySelector('[role="separator"]')).not.toBeNull()
+    } finally {
+      unmount()
+    }
+  })
+
+  it('a path-less files window does not render a download action', () => {
+    const { store, ctx, homeTab } = setup()
+    store.setPrefs({ ...store.getPrefs(), editorExplorer: true })
+    const { container, unmount } = mountHost(ctx, store, homeTab)
+    try {
+      expect(container.querySelector('a[aria-label="Download"]')).toBeNull()
     } finally {
       unmount()
     }

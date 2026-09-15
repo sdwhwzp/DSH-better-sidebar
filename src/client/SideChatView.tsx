@@ -36,7 +36,7 @@ import {
   IconNewChatOutline16,
   IconPlusOutline16,
   IconSearchOutline16,
-  IconSendOutline16,
+  IconSendOutline14,
   IconSparkle16,
   IconStopFill16,
   MarkdownText,
@@ -739,7 +739,8 @@ export function SideChatView(props: {
         <ConnectionIndicator
           state={connectionState}
           disconnectedLabel={t('sideChatConnDisconnected')}
-          reconnectLabel={t('sideChatConnReconnect')}
+          // Required by the 0.1.5 component; 0.1.6 uses the action labels below.
+          {...{ reconnectLabel: t('sideChatConnReconnect') }}
           connectingLabel={t('sideChatConnConnecting')}
           recoveredLabel={t('sideChatConnRecovered')}
           reconnectActionLabel={t('sideChatConnReconnectAction')}
@@ -802,7 +803,7 @@ export function SideChatView(props: {
               disabled={composer.trim() === '' || busy !== null}
               title={t('sideChatSend')}
             >
-              <IconSendOutline16 />
+              <IconSendOutline14 size={16} />
             </button>
           )}
         </div>

@@ -40,13 +40,13 @@ The personal fork adapts side chat to the Harness 0.1.6 send icon and connection
 - [✨ Features](#-features)
 - [🚀 Installation](#-installation)
 - [🖼️ Feature Tour](#-feature-tour)
+- [💬 Community](#-community)
 - [🆕 Recent Updates](#-recent-updates)
 - [⌨️ Keyboard Shortcuts](#-keyboard-shortcuts)
 - [🔌 Service API](#-service-api)
 - [🛠️ Development & Build](#-development--build)
 - [🔐 Security](#-security) · [⚠️ Known Limitations](#-known-limitations) · [🖥️ Platform Support](#-platform-support)
-- [💬 Community](#-community) · [🌐 Plugin Ecosystem](#-plugin-ecosystem)
-- [🤝 Contributing](#-contributing) · [👥 Contributors](#-contributors) · [🔗 Friends](#-friends)
+- [🌐 Plugin Ecosystem](#-plugin-ecosystem) · [🤝 Contributing](#-contributing) · [👥 Contributors](#-contributors) · [🔗 Friends](#-friends)
 
 ## ✨ Features
 
@@ -185,6 +185,19 @@ Update: `git pull && pnpm install && pnpm build` → `node scripts/package-regis
 
 
 
+## 💬 Community
+
+WeChat / QQ group QR codes will live here. After uploading the QR images (drag them into any issue/comment to get a `user-attachments` link), replace `src` below and uncomment:
+
+<div align="center">
+  <!-- WeChat group QR code
+  <img width="220" alt="WeChat group QR code" src="https://github.com/user-attachments/assets/REPLACE_ME" />
+  -->
+  <!-- QQ group QR code
+  <img width="220" alt="QQ group QR code" src="https://github.com/user-attachments/assets/REPLACE_ME" />
+  -->
+</div>
+
 ## 🆕 Recent Updates
 <div align="center">
   <a href="https://github.com/user-attachments/assets/d2aea86b-a776-4f01-a6b8-b26b27314336"><img width="33%" alt="Sidebar" src="https://github.com/user-attachments/assets/d2aea86b-a776-4f01-a6b8-b26b27314336" /></a>
@@ -271,19 +284,6 @@ make clean          # remove lib/, *.tgz, playwright-report/, test-results/
 ## 🖥️ Platform Support
 
 Windows / Linux / macOS (macOS validated daily; the rest covered by unit tests). The plugin carries no native dependencies (the terminal and `node-pty` went back to DSH wholesale), so building needs only Node + pnpm, with no compiler toolchain.
-
-## 💬 Community
-
-WeChat / QQ group QR codes will live here. After uploading the QR images (drag them into any issue/comment to get a `user-attachments` link), replace `src` below and uncomment:
-
-<div align="center">
-  <!-- WeChat group QR code
-  <img width="220" alt="WeChat group QR code" src="https://github.com/user-attachments/assets/REPLACE_ME" />
-  -->
-  <!-- QQ group QR code
-  <img width="220" alt="QQ group QR code" src="https://github.com/user-attachments/assets/REPLACE_ME" />
-  -->
-</div>
 
 ## 🌐 Plugin Ecosystem
 

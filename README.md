@@ -1,6 +1,6 @@
 # dsh-better-sidebar
 
-本 fork 保留账号授权、本机目录桥接和文件下载。文件交付由 Harness 原生卡片展示；终端和文档预览使用 Harness 0.1.7 的原生侧栏。
+本 fork 保留账号授权、本机目录桥接和文件下载。文件交付由 Harness 原生卡片展示；终端和文档预览使用 Harness 原生侧栏。本 fork 当前适配私有 Harness `0.2.1-alpha.1`，保留 Mac/Windows 配对目录中的文件、Git 与媒体访问；网关按登录账号限制目标目录。
 
 
 > [!IMPORTANT]

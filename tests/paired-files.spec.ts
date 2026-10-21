@@ -9,7 +9,7 @@ describe('paired folder routes', () => {
     const calls: string[] = []
     const bytes = Buffer.from([0, 255, 128, 42])
     const ctx = {
-      webRuntime: { trustedHosts: ['example.com'] },
+      connection: { requestRejection: () => undefined },
       webServer: {
         register: (route: SidebarWebRoute) => { routes.push(route); return () => {} },
         registerUpgrade: () => () => {},

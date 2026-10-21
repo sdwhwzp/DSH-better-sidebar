@@ -1,14 +1,15 @@
+import './browser-globals.ts'
 import { describe, expect, it } from 'vitest'
 import { decodeHtmlUrl } from '../src/html-route.ts'
-import { isAbsolutePath, relativeTo } from '../src/client/paths.ts'
+import { isAbsolutePath, relativeTo, workspaceRelativePath } from '../src/client/paths.ts'
 import { resolveSidebarPath } from '../src/client/paths.ts'
 import { downloadUrl, htmlUrl, mediaUrl } from '../src/client/api.ts'
 
 describe('path helpers', () => {
   it('keeps relative HTML assets under the resolved Windows session path', () => {
     const route = htmlUrl({ sessionId: 's', cwd: 'C:/users/u3' }, 'delivery/preview.html')
-    expect(route).toBe('/sidebar/html/s/C%3A/users/u3/delivery/preview.html')
-    expect(new URL('./style.css', 'http://localhost' + route).pathname)
+    expect(new URL(route).pathname).toBe('/sidebar/html/s/C%3A/users/u3/delivery/preview.html')
+    expect(new URL('./style.css', route).pathname)
       .toBe('/sidebar/html/s/C%3A/users/u3/delivery/style.css')
   })
 
@@ -76,11 +77,11 @@ describe('path helpers', () => {
     // The marker is platform-neutral now: the host resolves the decoded
     // '//server/share/...' form per-platform, so no cwd/OS signal is needed.
     expect(htmlUrl({ sessionId: 's' }, '\\\\server\\share\\proj\\a.html'))
-      .toBe('/sidebar/html/s//server/share/proj/a.html')
+      .toBe('http://localhost/sidebar/html/s//server/share/proj/a.html')
     expect(htmlUrl({ sessionId: 's', cwd: '/home/me' }, '//server/share/a.html'))
-      .toBe('/sidebar/html/s//server/share/a.html')
+      .toBe('http://localhost/sidebar/html/s//server/share/a.html')
     expect(htmlUrl({ sessionId: 's', cwd: '/home/me' }, '/home/me/index.html'))
-      .toBe('/sidebar/html/s/home/me/index.html')
+      .toBe('http://localhost/sidebar/html/s/home/me/index.html')
   })
 })
 
@@ -112,5 +113,35 @@ describe('preview URL path resolution', () => {
 
   it('leaves relative file queries for server resolution when cwd is unavailable', () => {
     expect(new URL(mediaUrl({ sessionId: 's' }, 'pic.png'), 'http://localhost').searchParams.get('path')).toBe('pic.png')
+  })
+})
+
+describe('workspaceRelativePath', () => {
+  it.each([
+    ['/work', '/work/src/a.ts', 'src/a.ts'],
+    ['/work/', '/work', '.'],
+    ['/', '/src/a.ts', 'src/a.ts'],
+    ['/', '/', '.'],
+    ['C:\\Work', 'c:/work/SRC/a.ts', 'SRC/a.ts'],
+    ['C:\\Work\\', 'c:/WORK', '.'],
+    ['C:\\', 'c:/SRC/a.ts', 'SRC/a.ts'],
+    ['C:\\Work', 'c:/work/my dir\\a.ts', 'my dir/a.ts'],
+    ['\\\\server\\share\\Work', '//SERVER/share/work/src/a.ts', 'src/a.ts'],
+  ])('projects %s / %s', (root, path, expected) => {
+    expect(workspaceRelativePath(root, path)).toBe(expected)
+  })
+
+  it.each([
+    [undefined, '/work/a.ts'],
+    ['', '/work/a.ts'],
+    ['work', '/work/a.ts'],
+    ['/work', '/outside/a.ts'],
+    ['/work', '/work-other/a.ts'],
+    ['/work', '/WORK/a.ts'],
+    ['/work', '/work/../outside/a.ts'],
+    ['/work', 'src/a.ts'],
+    ['C:/Work', 'D:/Work/a.ts'],
+  ])('refuses an unavailable root or unsafe projection %j / %s', (root, path) => {
+    expect(workspaceRelativePath(root, path)).toBeUndefined()
   })
 })

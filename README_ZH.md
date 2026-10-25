@@ -1,5 +1,7 @@
 # dsh-better-sidebar
 
+原生 PDF 预览工具栏提供“下载”按钮，通过文件树同一条受账号和会话权限保护的流式下载接口保存原文件，PDF 渲染仍由 Harness 负责。
+
 <div align="center">
   <b style="font-size: 1.15em;">DSH 的双工作台：原生右侧栏 + 自绘底部面板，并把 <code>ctx.betterSidebar</code> 服务开放给所有插件</b><br /><br />
   <a href="https://www.npmjs.com/package/dsh-better-sidebar"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-better-sidebar" /></a>

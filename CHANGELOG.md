@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.28.0-dsh.20261025.1
+
+- Restore the Download action in the native PDF preview toolbar, retaining file-session authorization and original binary streaming.
+
 > 本文档收录 dsh-better-sidebar 的完整发布历史（最新版摘要见 [README](README_ZH.md)；同步发布于 [GitHub Releases](https://github.com/omdsh-dev/DSH-better-sidebar/releases)）。
 
 ### v0.28.0

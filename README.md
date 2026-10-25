@@ -1,5 +1,7 @@
 # dsh-better-sidebar
 
+Native PDF previews include a Download action in their toolbar. It saves the original file through the same authenticated, session-scoped streaming route as the file tree; PDF rendering stays in Harness.
+
 This fork preserves account authorization, local-directory pairing and downloads on Harness 0.2.1-rc.2. File requests retain the logged-in account's directory grants. Host files use streaming transfer; paired-file bytes come from the authenticated directory provider.
 
 <div align="center">

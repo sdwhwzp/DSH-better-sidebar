@@ -7,25 +7,27 @@ import type { CopyKey } from '../locales.ts'
 import { parseFileAddress } from '../resource-address.ts'
 import css from '../sidebar.module.css'
 
-/** The native keyed document seat supplies its tab observer and bound locale. */
+/** The native seat supplies the tab, resolved file metadata, and bound locale. */
 interface PdfDownloadProps {
   readonly useTabInfo: () => { readonly tab: { readonly contentId: string } }
+  readonly useResource: (address: string) => { readonly value?: { readonly absolutePath: string } }
   readonly sessionId: string
   readonly t: (key: CopyKey) => string
 }
 
 /**
- * Render a link using the file address's session, even when another session owns the sidebar.
+ * Download the resolved original path using its file session, including cross-session tabs.
  * @param props - native document owner, tab seat, localized copy and enclosing session.
  * @returns the original-file download link, or nothing for an unsupported address.
  */
 export function PdfDownload(props: PdfDownloadProps): ReactNode {
   const { tab } = props.useTabInfo()
+  const metadata = props.useResource(tab.contentId)
   const file = parseFileAddress(tab.contentId)
-  if (file === undefined || !/\.pdf$/i.test(file.path)) return null
+  if (file === undefined || !/\.pdf$/i.test(file.path) || metadata.value === undefined) return null
   const sessionId = file.scope === 'session' ? file.sessionId : props.sessionId
   return <Tooltip label={props.t('download')} side="bottom">
-    <a className={css.iconButton} href={downloadUrl({ sessionId }, file.path)} download
+    <a className={css.iconButton} href={downloadUrl({ sessionId }, metadata.value.absolutePath)} download
       aria-label={props.t('download')} data-sidebar-pdf-download>
       <IconDownloadOutlineRegular size={14} />
     </a>

@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '../src/context-types.ts'
 import { PdfDownload, registerPdfDownload } from '../src/client/sidebar/pdf-download.tsx'
-import { fileAddressFor } from '../src/client/resource-address.ts'
+import { fileAddressFor, parseFileAddress } from '../src/client/resource-address.ts'
 import { en, zh } from '../src/client/locales.ts'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
@@ -27,6 +27,7 @@ function render(element: ReactNode): HTMLElement {
 type Props = Parameters<typeof PdfDownload>[0]
 function props(address: string, label = en.download): Props {
   return { sessionId: 'seat-session', useTabInfo: () => ({ tab: { contentId: address } }),
+    useResource: () => ({ value: { absolutePath: parseFileAddress(address)?.path ?? '' } }),
     t: () => label }
 }
 
@@ -43,10 +44,19 @@ describe('native PDF download', () => {
     expect(link.getAttribute('aria-label')).toBe(label)
   })
 
-  it('retains a relative file path so the host resolves the source session workspace', () => {
-    const view = render(<PdfDownload {...props(fileAddressFor('owner', undefined, 'reports/result.pdf'))} />)
+  it('uses the resolved source path for a relative address instead of the enclosing workspace', () => {
+    const input = props(fileAddressFor('owner', undefined, 'reports/result.pdf'))
+    const view = render(<PdfDownload {...input}
+      useResource={() => ({ value: { absolutePath: '/source/workspace/reports/result.pdf' } })} />)
     const link = view.querySelector('a')! as HTMLAnchorElement
-    expect(new URL(link.href).searchParams.get('path')).toBe('reports/result.pdf')
+    expect(new URL(link.href).searchParams.get('path')).toBe('/source/workspace/reports/result.pdf')
+    expect(new URL(link.href).searchParams.get('sessionId')).toBe('owner')
+  })
+
+  it('waits until the original file has an authorized resolved path', () => {
+    const view = render(<PdfDownload {...props(fileAddressFor('owner', undefined, 'report.pdf'))}
+      useResource={() => ({})} />)
+    expect(view.querySelector('a')).toBeNull()
   })
 
   it('uses the enclosing session for a legacy absolute file address', () => {

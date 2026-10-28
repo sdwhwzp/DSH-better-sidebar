@@ -1,3 +1,4 @@
+import { Service } from '@deepseek-ai/cordis'
 /**
  * Host route tests for the Side Chat API ('sidechat.start' / 'sidechat.prompt'
  * / 'sidechat.cancel' / 'sidechat.dispose' / 'sidechat.info' /
@@ -35,6 +36,7 @@ function agent(id: string, over: {
     clear: vi.fn(),
     remove: vi.fn((_id: string) => true),
   }
+  const append = vi.fn((_type: string, _data: unknown) => ({ type: _type, seq: 0, time: 0, data: _data }))
   return {
     id,
     status: 'idle' as const,
@@ -43,16 +45,15 @@ function agent(id: string, over: {
       model: over.model ?? 'model-x',
       ...(over.reasoningEffort !== undefined ? { reasoningEffort: over.reasoningEffort } : {}),
     },
-    // The agent-scoped context `installModelSelection` binds its prompt /
-    // request waterfalls to; the fake records the listeners' existence only.
     ctx: { on: vi.fn((_event: string, _listener: unknown) => () => {}) },
     session: {
       id,
       header: { cwd: '/p', delegationDepth: 0, agentPreset: 'preset-a', ...over.header },
       inheritedEventCount: over.inheritedEventCount ?? 0,
       snapshotEvents: () => over.events ?? [],
-      append: vi.fn((_type: string, _data: unknown) => ({ type: _type, seq: 0, time: 0, data: _data })),
+      append,
     },
+    model: { select: vi.fn((selection: unknown) => { append('model/selection', selection) }) },
     inject: vi.fn(),
     followup: vi.fn(),
     cancel: vi.fn(),
@@ -168,21 +169,25 @@ describe('sidechat.start', () => {
       apply(state: string | null, event: SessionEvent): string | null
     }
     let registered: DirectoryProjection | undefined
-    // Capture the REAL alpha.5 unit contributed by the host service. These
-    // context seams do not run system-prompt assembly, fs checks, or notices.
-    const workingDirectory = new WorkingDirectoryService({
+    class InitializedWorkingDirectory extends WorkingDirectoryService {
+      async ready(): Promise<void> { await this[Service.init]() }
+    }
+    const workingDirectory = new InitializedWorkingDirectory({
       reflect: { provide: () => {} },
       sessionProjections: {
-        register: (definition: DirectoryProjection) => { registered = definition },
-        stateOf: (session: { header: { cwd?: string }; snapshotEvents(): SessionEvent[] }) => {
-          if (registered === undefined) throw new Error('working-directory unit not registered')
-          return session.snapshotEvents().reduce((cwd, event) => registered!.apply(cwd, event), registered.init(session.header))
+        register: async (definition: DirectoryProjection) => {
+          registered = definition
+          return {
+            stateOf: (session: { header: { cwd?: string }; snapshotEvents(): SessionEvent[] }) =>
+              session.snapshotEvents().reduce((cwd, event) => definition.apply(cwd, event), definition.init(session.header)),
+          }
         },
       },
       systemPrompt: { context: () => {}, getContextOrder: () => 0 },
       on: () => {},
       effect: () => {},
     } as never, {})
+    await workingDirectory.ready()
     expect(workingDirectory.get(parent.session as never)).toBe(current)
     const services = happyServices(parent, agent('child'))
     await buildSidechatApi(ctxWith({ ...services, workingDirectory }))['sidechat.start']({ sessionId: 'parent' })
@@ -1020,13 +1025,9 @@ describe('sidechat.models and sidechat.model', () => {
       model: 'm2',
       reasoningEffort: 'high',
     })
-    // The selection seam is installed ONCE per agent: the second switch of the
-    // same thread only mutates the ref.
-    const listeners = child.ctx.on.mock.calls.length
-    expect(listeners).toBeGreaterThan(0)
     await api['sidechat.model']({ childId: 'child-model', provider: 'p2', model: 'm2' })
     expect(child.session.append).toHaveBeenCalledTimes(2)
-    expect(child.ctx.on.mock.calls.length).toBe(listeners)
+    expect(child.model.select).toHaveBeenCalledTimes(2)
   })
 
   it('rejects an unavailable model with a bad-request', async () => {

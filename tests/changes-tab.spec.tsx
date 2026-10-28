@@ -633,15 +633,12 @@ describe('ChangesTab', () => {
         expect(button, label).not.toBeNull()
         return button!.querySelector('svg')!.innerHTML
       }
-      // A stage affordance that drew the unstage glyph is the #941 regression:
-      // the two directions must not share artwork (vscode: $(add) vs $(remove)).
-      // Unstage is the horizontal half alone; staging adds the vertical stroke
-      // (the host's Plus) — the two directions must not share one glyph.
       const stage = iconOf(t('stage'))
       const unstage = iconOf(t('unstage'))
       expect(unstage).toContain(MINUS_GLYPH)
-      expect(unstage).not.toContain('M8 2V14')
-      expect(stage).toContain('M8 2V14')
+      expect(unstage).not.toContain('#dsw-icon-plus-outline-regular')
+      expect(stage).toContain('#dsw-icon-plus-outline-regular')
+      expect(stage).not.toContain(MINUS_GLYPH)
     } finally {
       act(() => { root.unmount() })
       container.remove()

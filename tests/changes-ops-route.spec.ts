@@ -1,3 +1,4 @@
+import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
 import { Context as CordisContext } from '@deepseek-ai/cordis'
 import { SessionStore } from '@deepseek-ai/dsh-session'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'

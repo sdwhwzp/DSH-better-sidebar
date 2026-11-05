@@ -286,7 +286,7 @@ function snapshotWithChildren(count: number): SidebarSessionList {
     projectionsBySession[id] = { values: { subagentCatalog: [] }, state: 'ready', error: null }
   }
   projectionsBySession.root = {
-    values: { subagentCatalog: entries, ...(teamProjection === undefined ? {} : { agentTeam: teamProjection }) },
+    values: teamValues(entries),
     state: 'ready',
     error: null,
   }
@@ -312,7 +312,7 @@ function snapshotWithRun(): SidebarSessionList {
     projectionsBySession[entry.id] = { values: { subagentCatalog: [] }, state: 'ready', error: null }
   }
   projectionsBySession.root = {
-    values: { subagentCatalog: entries, ...(teamProjection === undefined ? {} : { agentTeam: teamProjection }) },
+    values: teamValues(entries),
     state: 'ready',
     error: null,
   }
@@ -522,6 +522,18 @@ describe('Tasks page interactions', () => {
  * (`withTeam(null)`) when the tree leads no team. A task omitted from `tasks`
  * is not on the board at all.
  */
+function teamValues(entries: SidebarSubagentCatalogEntry[]): SidebarProjectionSnapshot['values'] {
+  if (teamProjection === undefined) return { subagentCatalog: entries }
+  const team = teamProjection
+  return {
+    subagentCatalog: entries.map(entry => {
+      const member = team.members.find(member => member.id === entry.id && member.role === 'teammate')
+      return member === undefined ? entry : { ...entry, mode: 'continuable', label: member.name }
+    }),
+    agentTeam: { enabled: true, tasks: team.tasks, failure: team.failure },
+  }
+}
+
 function withTeam(input: {
   members?: SidebarTeamMemberProjection[]
   tasks?: SidebarTeamTaskView[]

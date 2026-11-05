@@ -35,7 +35,15 @@ function projections(
   rootId: string,
   teamValue: SidebarTeamProjection,
 ): SidebarSessionList['projectionsBySession'] {
-  return { [rootId]: { values: { agentTeam: teamValue }, state: 'ready', error: null } }
+  return { [rootId]: {
+    values: {
+      agentTeam: { enabled: true, tasks: teamValue.tasks, failure: teamValue.failure },
+      subagentCatalog: teamValue.members.filter(member => member.role === 'teammate')
+        .map(member => ({ id: member.id, label: member.name, mode: 'continuable', createdAt: 0 })),
+    },
+    state: 'ready',
+    error: null,
+  } }
 }
 
 /** A summary row. */
@@ -46,7 +54,41 @@ function summary(id: string, over: Partial<SidebarSessionSummary> = {}): Sidebar
 describe('teamProjectionOf', () => {
   it('reads the root session own projection', () => {
     const value = team()
-    expect(teamProjectionOf(projections('root', value), 'root')).toBe(value)
+    expect(teamProjectionOf(projections('root', value), 'root')).toEqual({
+      ...value,
+      members: [{ id: 'root', name: 'lead', role: 'lead', phase: 'active' }, ...value.members],
+    })
+  })
+
+  it('hides a disabled rc.1 team without assuming a retired members field', () => {
+    const snapshots: SidebarSessionList['projectionsBySession'] = {
+      root: { values: { agentTeam: { enabled: false, tasks: [] } }, state: 'ready', error: null },
+    }
+    expect(teamProjectionOf(snapshots, 'root')).toBeUndefined()
+  })
+
+  it('keeps tasks and failure while reading persistent teammates from the current catalog', () => {
+    const snapshots: SidebarSessionList['projectionsBySession'] = {
+      root: {
+        values: {
+          agentTeam: { enabled: true, tasks: [], failure: 'invalid persisted task' },
+          subagentCatalog: [
+            { id: 'worker', label: 'writer', mode: 'continuable', createdAt: 1 },
+            { id: 'finished', mode: 'one-shot', createdAt: 2 },
+          ],
+        },
+        state: 'ready',
+        error: null,
+      },
+    }
+    expect(teamProjectionOf(snapshots, 'root')).toEqual({
+      members: [
+        { id: 'root', name: 'lead', role: 'lead', phase: 'active' },
+        { id: 'worker', name: 'writer', role: 'teammate', phase: 'active' },
+      ],
+      tasks: [],
+      failure: 'invalid persisted task',
+    })
   })
 
   it('answers undefined without a root, without a snapshot, or without a team', () => {

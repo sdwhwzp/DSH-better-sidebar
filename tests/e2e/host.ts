@@ -135,6 +135,12 @@ export async function dismissOnboarding(page: Page): Promise<void> {
     // A previously acknowledged onboarding may not appear again.
     return
   }
+  const bootAnimation = page.getByRole('dialog', { name: 'DSH boot animation', exact: true })
+  await expect.poll(async () => {
+    if (!await bootAnimation.isVisible()) return false
+    await page.keyboard.press('Escape')
+    return bootAnimation.isVisible()
+  }, { timeout: 60_000 }).toBe(false)
   for (let round = 0; round < 8; round++) {
     let dismissed = false
     for (const button of buttons) {

@@ -197,7 +197,8 @@ async function onScreenSession(page: Page): Promise<string | undefined> {
  * @returns the new session's id.
  */
 async function newConversation(page: Page, from: string | undefined): Promise<string> {
-  await page.getByRole('button', { name: /^(New session|新建会话)$/ }).first().click()
+  await page.getByRole('button', { name: /^(New session|新建会话)$/i })
+    .filter({ hasNot: page.locator('[data-copy-version]') }).first().click()
   await expect.poll(() => onScreenSession(page), { timeout: 60_000 }).not.toBe(from)
   const now = await onScreenSession(page)
   if (now === undefined) throw new Error('the new conversation did not take the right sidebar seat')

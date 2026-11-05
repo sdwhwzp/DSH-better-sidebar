@@ -13,7 +13,7 @@
  *
  * The plugin never imports the experimental package; the fake service here is
  * a structural double whose method names and rejection shapes mirror
- * `@deepseek-ai/dsh-experimental-agent-team@0.1.7-rc.1`'s `TeamService`.
+ * `@deepseek-ai/dsh-agent-team@0.2.2-rc.1`'s `TeamService`.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { buildTeamsApi } from '../src/team-routes.ts'
@@ -48,7 +48,7 @@ describe('teams.taskCreate route', () => {
   it('passes the shaped request through and returns the committed view', async () => {
     const created = task({ id: 'task-9', subject: '新任务' })
     const teams = {
-      tryMembership: vi.fn(() => ({ role: 'lead' })),
+      isEnabled: vi.fn(() => true),
       createTask: vi.fn(async () => created),
     }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
@@ -70,7 +70,7 @@ describe('teams.taskCreate route', () => {
   })
 
   it('degrades to 404 when the root agent is not live in this process', async () => {
-    const teams = { tryMembership: vi.fn(() => ({ role: 'lead' })), createTask: vi.fn() }
+    const teams = { isEnabled: vi.fn(() => true), createTask: vi.fn() }
     const api = buildTeamsApi(ctxWith(teams, { get: () => undefined }))
     await expect(api.taskCreate({ rootSessionId: 'root', subject: 's' })).rejects.toThrowError(
       expect.objectContaining({ code: 'team-error', status: 404 }),
@@ -78,17 +78,17 @@ describe('teams.taskCreate route', () => {
     expect(teams.createTask).not.toHaveBeenCalled()
   })
 
-  it('degrades to 404 when tryMembership misses (root leads no team)', async () => {
-    const teams = { tryMembership: vi.fn(() => undefined), createTask: vi.fn() }
+  it('degrades to 404 when Team mode is disabled', async () => {
+    const teams = { isEnabled: vi.fn(() => false), createTask: vi.fn() }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
     await expect(api.taskCreate({ rootSessionId: 'root', subject: 's' })).rejects.toThrowError(
       expect.objectContaining({ code: 'team-error', status: 404 }),
     )
   })
 
-  it('maps a throwing tryMembership to 404 (stale member identity)', async () => {
+  it('maps a throwing isEnabled to 404 (stale member identity)', async () => {
     const teams = {
-      tryMembership: vi.fn(() => { throw new Error('stale') }),
+      isEnabled: vi.fn(() => { throw new Error('stale') }),
       createTask: vi.fn(),
     }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
@@ -98,7 +98,7 @@ describe('teams.taskCreate route', () => {
   })
 
   it('rejects a missing subject as bad-request before calling the service', async () => {
-    const teams = { tryMembership: vi.fn(() => ({ role: 'lead' })), createTask: vi.fn() }
+    const teams = { isEnabled: vi.fn(() => true), createTask: vi.fn() }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
     await expect(api.taskCreate({ rootSessionId: 'root' })).rejects.toThrowError(
       expect.objectContaining({ code: 'bad-request' }),
@@ -108,7 +108,7 @@ describe('teams.taskCreate route', () => {
 
   it('maps a service rejection to a 400 team-error', async () => {
     const teams = {
-      tryMembership: vi.fn(() => ({ role: 'lead' })),
+      isEnabled: vi.fn(() => true),
       createTask: vi.fn(async () => { throw teamError('TEAM_TASK_LIMIT', 'task limit reached') }),
     }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
@@ -122,7 +122,7 @@ describe('teams.taskUpdate route', () => {
   it('passes the CAS request through and returns the committed view', async () => {
     const done = task({ status: 'completed', revision: 2 })
     const teams = {
-      tryMembership: vi.fn(() => ({ role: 'lead' })),
+      isEnabled: vi.fn(() => true),
       updateTask: vi.fn(async () => done),
     }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
@@ -138,7 +138,7 @@ describe('teams.taskUpdate route', () => {
 
   it('maps a stale revision to 409 team-conflict (0.1.7 throws instead of returning)', async () => {
     const teams = {
-      tryMembership: vi.fn(() => ({ role: 'lead' })),
+      isEnabled: vi.fn(() => true),
       updateTask: vi.fn(async () => {
         throw teamError('TEAM_TASK_STALE_REVISION', 'stale team task "task-1" revision 1; current revision is 2')
       }),
@@ -152,7 +152,7 @@ describe('teams.taskUpdate route', () => {
   it('keeps every other rejection on team-error, never on team-conflict', async () => {
     for (const code of ['TEAM_TASK_NOT_FOUND', 'TEAM_NOT_MEMBER', 'TEAM_DISPOSED']) {
       const teams = {
-        tryMembership: vi.fn(() => ({ role: 'lead' })),
+        isEnabled: vi.fn(() => true),
         updateTask: vi.fn(async () => { throw teamError(code, 'nope') }),
       }
       const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
@@ -164,7 +164,7 @@ describe('teams.taskUpdate route', () => {
 
   it('reports an untagged rejection as a 400 with its own message', async () => {
     const teams = {
-      tryMembership: vi.fn(() => ({ role: 'lead' })),
+      isEnabled: vi.fn(() => true),
       updateTask: vi.fn(async () => { throw new Error('board exploded') }),
     }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
@@ -176,7 +176,7 @@ describe('teams.taskUpdate route', () => {
   })
 
   it('validates taskId / expectedRevision / action before calling the service', async () => {
-    const teams = { tryMembership: vi.fn(() => ({ role: 'lead' })), updateTask: vi.fn() }
+    const teams = { isEnabled: vi.fn(() => true), updateTask: vi.fn() }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
     await expect(api.taskUpdate({ rootSessionId: 'root', expectedRevision: 1, action: 'complete' }))
       .rejects.toThrowError(expect.objectContaining({ code: 'bad-request' }))
@@ -191,7 +191,7 @@ describe('teams.taskUpdate route', () => {
 
   it('forwards optional edit fields only when present', async () => {
     const teams = {
-      tryMembership: vi.fn(() => ({ role: 'lead' })),
+      isEnabled: vi.fn(() => true),
       updateTask: vi.fn(async () => task()),
     }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
@@ -218,7 +218,7 @@ describe('teams.taskUpdate route', () => {
 
   it('never leaks the 0.1.6 remote vocabulary into the service call', async () => {
     const teams = {
-      tryMembership: vi.fn(() => ({ role: 'lead' })),
+      isEnabled: vi.fn(() => true),
       updateTask: vi.fn(async () => task()),
     }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))

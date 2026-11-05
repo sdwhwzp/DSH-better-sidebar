@@ -60,7 +60,8 @@ test('a blank session keeps the bottom workbench reachable from the top-right en
   await dismissOnboarding(page)
 
   // 新建会话进入 blank 相位：右上角出现备用入口（宿主的侧边栏按钮旁边）。
-  await page.getByRole('button', { name: /^(New session|新建会话)$/i }).first().click({ timeout: 30_000 })
+  await page.getByRole('button', { name: /^(New session|新建会话)$/i })
+    .filter({ hasNot: page.locator('[data-copy-version]') }).first().click({ timeout: 30_000 })
   const fallback = page.locator('[data-dsh-dock-fallback]')
   await expect(fallback, '空白会话的备用入口').toBeVisible({ timeout: 60_000 })
   await expect(page.locator('[data-sidebar-right-expand]'), '宿主的侧边栏按钮仍在').toBeVisible()

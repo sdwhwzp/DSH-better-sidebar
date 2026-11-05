@@ -1,32 +1,16 @@
 /**
- * The plugin's view of DSH 0.1.7's `agentTeam` Session projection — the Lead
- * Session's team board, read straight off the client snapshot.
+ * Normalize DSH 0.2.2's `agentTeam` state and `subagentCatalog` into the Tasks
+ * page's board and persistent teammate rows. The wire carries enabled/tasks/
+ * failure, not the retired members array. Disabled Team mode hides the board.
  *
- * 0.1.6 exposed the board through the experimental service's Remote vocabulary
- * (`agentTeams.remoteView`, reached over the wire) and the page had to poll it
- * every 5s. 0.1.7 deleted that trio and publishes the same state as a Session
- * projection instead: `SessionListState.projectionsBySession[leadId].values
- * .agentTeam`, loaded once per connection like every other projection. This
- * module is therefore a pure adapter — no request, no poller, no observer —
- * exactly like ./subagent-catalog.ts for the catalog.
+ * The root and allocated continuable children form the persistent roster.
+ * One-shot children remain in the ordinary task topology; they must not be
+ * relabeled as waiting teammates after completing their work. Current activity
+ * still comes from subagents.live and the session list. Catalog membership
+ * does not report historical provisioning failures, so none are synthesized.
  *
- * Two facts the durable projection does not carry are DERIVED, not invented:
- *
- * - TURN ACTIVITY. A projection row is `{ id, name, role, phase, error? }`
- *   where `phase` is the durable lifecycle (`provisioning | active | failed`,
- *   the Lead row always `active`). Whether a member is running right now comes
- *   from the session's own status — upstream's own web UI "reads the shared
- *   Session projections and overlays activity from Session status" — and this
- *   plugin already has that overlay: `subagents.live` reports EVERY tree child
- *   with an explicit `running` flag (see ./subagent-catalog.ts's `childLive`),
- *   with the session list's own coarse `running` as the fallback for the Lead.
- * - `diagnostics`, the 0.1.6 view's array of provisioning notes, collapses to
- *   the projection's single durable `error` string.
- *
- * What is genuinely gone is the member's `model` (and `description` /
- * `provider` / `context`): the wire view never carried them, so the node
- * detail no longer has a model row to show. See the design note
- * docs/plans/2026-09-27-agent-teams-dsh-0.1.7-adaptation.md.
+ * Both projections already ride the session snapshot: no extra request,
+ * observer or poller is needed.
  */
 import type {
   SidebarChildLiveView,
@@ -76,7 +60,24 @@ export function teamProjectionOf(
   rootId: string | undefined,
 ): SidebarTeamProjection | undefined {
   if (rootId === undefined) return undefined
-  return projections?.[rootId]?.values.agentTeam
+  const values = projections?.[rootId]?.values
+  const team = values?.agentTeam
+  if (team?.enabled !== true) return undefined
+  return {
+    members: [
+      { id: rootId, name: 'lead', role: 'lead', phase: 'active' },
+      ...(values?.subagentCatalog ?? [])
+        .filter(child => child.mode === 'continuable')
+        .map(child => ({
+          id: child.id,
+          name: child.label ?? child.id,
+          role: 'teammate' as const,
+          phase: 'active' as const,
+        })),
+    ],
+    tasks: team.tasks,
+    ...(team.failure === undefined ? {} : { failure: team.failure }),
+  }
 }
 
 /**

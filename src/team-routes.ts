@@ -23,7 +23,7 @@
  *   belt to that pair of braces);
  * - the tree's root agent is not live in this process (cold session / another
  *   harness) → 404 `team-error`; teams are live-led by definition;
- * - the root leads no team (`tryMembership` miss) → 404 `team-error`.
+ * - the root has Team mode disabled (`isEnabled` is false) → 404 `team-error`.
  *
  * Rejections are THROWN by 0.1.7 (0.1.6 returned a `TeamTaskMutationResult`
  * union), so the CAS conflict has to be translated back into a wire code the
@@ -107,7 +107,7 @@ export function buildTeamsApi(ctx: Context): SidebarTeamsRoutes {
       throw new SidebarError('team-error', 'the tree root is not live in this process', 404)
     }
     try {
-      if (teams.tryMembership(agent) === undefined) {
+      if (!teams.isEnabled(agent)) {
         throw new SidebarError('team-error', 'the tree root leads no team', 404)
       }
     } catch (error) {

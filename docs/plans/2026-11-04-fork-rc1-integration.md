@@ -32,3 +32,8 @@ tab-reload and state-isolation assertions remain enabled.
 Cordis 4.1.0, include 1.1.0 and Schemastery 3.19 match the rc.1 dependency
 cohort. The optional better-locale plugin still advertises its old 0.1 peer
 ranges; that pre-existing third-party mismatch is recorded separately.
+
+Upstream v0.30.1 replaces the settings-nav marker and CSS mask with the
+shell slot `settings.section.icon`. The private package version stays
+`0.30.0-dsh.20261104.1`; only the icon implementation and its regression
+test come from that upstream fix.

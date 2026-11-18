@@ -19,12 +19,11 @@ import type { GitLineCounts, GitLogEntry, GitStatusEntry, GitStatusResult, GitWo
 import { api, SidebarApiError } from '../api.ts'
 import { builtinFileIcon, builtinFolderIcon } from '../file-icons.tsx'
 import { usePolling } from '../use-polling.ts'
-import { useSubmenuFlip } from '../menu-flip.ts'
 import { baseName, relativeTo } from '../paths.ts'
 import { resolveSidebarPath } from '../paths.ts'
 import { isZh, t } from '../locales.ts'
 import { GitGraphSection, type GraphDetailsSelection } from './GitGraphSection.tsx'
-import type { SidebarDiffRef, SidebarStore } from '../state.ts'
+import type { SidebarDiffRef } from '../state.ts'
 import {
   ConfirmDialog, IconButton, Notice, StatusBadge, invalidateGitStatus, statusOfXY,
   useGitStatus, type GitFileStatus, type GitTone, type StatusTone,
@@ -359,9 +358,6 @@ type CommitRow = Pick<GitLogEntry, 'hash' | 'hashFull' | 'subject'>
 
 export interface GitLensProps {
   scope: SessionScope
-  /** @deprecated The sidebar store is no longer read here (the fence guard it
-   *  fed is gone); the prop stays for the caller's shape. */
-  store: SidebarStore
   onOpenFile: (path: string) => void
   /** Preview one change in the shared bottom pane (worktree or commit ref). */
   onPreview: (ref: SidebarDiffRef) => void
@@ -398,7 +394,7 @@ export function GitLens(props: GitLensProps) {
     service === undefined ? builtinFileIcon(path, 14) : service.fileIcon(path, 14)
   ), [service])
   const folderGlyph = useCallback((path: string, open: boolean): ReactNode => (
-    service === undefined ? builtinFolderIcon(open, 14) : service.folderIcon(path, open, 14)
+    service === undefined ? builtinFolderIcon(14) : service.folderIcon(path, open, 14)
   ), [service])
 
   const [worktrees, setWorktrees] = useState<GitWorktree[]>([])
@@ -431,7 +427,6 @@ export function GitLens(props: GitLensProps) {
    */
   const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null)
   const moreOpen = moreMenu !== null
-  useSubmenuFlip(moreMenu)
   const [branchOpen, setBranchOpen] = useState(false)
   /** Commit drafts, one per scope: the Commit button asks only for a message
    *  and a staged row, so a draft typed against another project would submit
@@ -1316,7 +1311,7 @@ export function GitLens(props: GitLensProps) {
         portal
         compact
         align="start"
-        getAnchorRect={() => (fileMenu === null ? null : new DOMRect(fileMenu.x, fileMenu.y, 0, 0))}
+        anchorPoint={fileMenu === null ? undefined : { x: fileMenu.x, y: fileMenu.y }}
         anchor={<span />}
       />
 
@@ -1374,7 +1369,7 @@ export function GitLens(props: GitLensProps) {
         portal
         compact
         align="start"
-        getAnchorRect={() => (historyMenu === null ? null : new DOMRect(historyMenu.x, historyMenu.y, 0, 0))}
+        anchorPoint={historyMenu === null ? undefined : { x: historyMenu.x, y: historyMenu.y }}
         anchor={<span />}
       />
 

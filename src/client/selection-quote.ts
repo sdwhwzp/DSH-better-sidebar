@@ -356,11 +356,6 @@ export function registerQuoteSource(ctx: Context): () => void {
   }
 }
 
-/** Whether this module instance currently owns a registered quote source. */
-export function quoteSourceReady(): boolean {
-  return sourceReady
-}
-
 // ── Insert (popup commit) ───────────────────────────────────────────────────
 
 /**
@@ -402,6 +397,10 @@ export function insertQuoteChip(ctx: Context, sessionId: string, sel: QuoteSelec
     }
   }
   loadStore()
+  // `saveStore` rewrites the whole key from this instance's memory, and other
+  // pages of the origin write the same key: merge their records in first, or
+  // the write erases them and their chips block the send in the codec.
+  readStoreIntoMemory()
   const n = nextN++
   const clipboardText = headerOf(sel.path, sel.cwd, sel.lines)
   // Built ONCE and kept in its size-reduced form (a raw selection is

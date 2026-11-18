@@ -29,28 +29,40 @@ describe('paired folder routes', () => {
       },
     }
     apply(ctx as never)
-    const run = async (route: string, method: string, url: string, body = '{}', cookie = 'owner') => {
+    const run = async (route: string, method: string, url: string, body = '{}', cookie = 'owner', range?: string) => {
       let status = 0
       let result = Buffer.alloc(0)
-      const request = { method, url, headers: { host: 'example.com', origin: 'https://example.com', 'sec-fetch-site': 'same-origin', cookie },
+      let headers: Record<string, string> = {}
+      const request = { method, url, headers: { host: 'example.com', origin: 'https://example.com', 'sec-fetch-site': 'same-origin', cookie, range },
         [Symbol.asyncIterator]: async function* () { yield Buffer.from(body) } }
-      const response = { writeHead: (value: number) => { status = value }, end: (value?: string | Buffer) => { result = Buffer.from(value ?? '') } }
+      const response = {
+        writeHead: (value: number, fields: Record<string, string> = {}) => { status = value; headers = fields },
+        end: (value?: string | Buffer) => { result = Buffer.from(value ?? '') },
+      }
       const handler = routes.find(row => row.path === route)!.handler
       await handler(request as never, response as never)
-      return { status, result }
+      return { status, result, headers }
     }
     try {
       const tree = await run('/sidebar/api', 'POST', '/sidebar/api/fs.tree', '{"sessionId":"paired"}')
       expect(tree.status).toBe(200)
       expect(tree.result.toString()).toContain('中文.md')
-      const media = await run('/sidebar/file', 'GET', '/sidebar/file?sessionId=paired&path=%2Fabsent%2Fimage.png')
+      const url = '/sidebar/file?sessionId=paired&path=%2Fabsent%2Fimage.png'
+      const media = await run('/sidebar/file', 'GET', url)
       expect(media.status).toBe(200)
       expect(media.result).toEqual(bytes)
+      const partial = await run('/sidebar/file', 'GET', url, '{}', 'owner', 'bytes=1-2')
+      expect(partial.status).toBe(206)
+      expect(partial.headers['content-range']).toBe('bytes 1-2/4')
+      expect(partial.result).toEqual(bytes.subarray(1, 3))
+      const unsatisfiable = await run('/sidebar/file', 'GET', url, '{}', 'owner', 'bytes=4-')
+      expect(unsatisfiable.status).toBe(416)
+      expect(unsatisfiable.headers['content-range']).toBe('bytes */4')
       const rejected = await run('/sidebar/api', 'POST', '/sidebar/api/fs.tree', '{"sessionId":"paired"}', 'other')
       expect(rejected.status).not.toBe(200)
       const upload = await run('/sidebar/upload', 'POST', '/sidebar/upload?sessionId=paired&dir=%2Fabsent&relativePath=x.txt')
       expect(upload.result.toString()).toContain('local upload unsupported')
-      expect(calls).toEqual(['fs.tree', 'fs.bytes', 'fs.tree', 'fs.upload'])
+      expect(calls).toEqual(['fs.tree', 'fs.bytes', 'fs.bytes', 'fs.bytes', 'fs.tree', 'fs.upload'])
     } finally { for (const cleanup of cleanups.reverse()) cleanup() }
   })
 })

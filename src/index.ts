@@ -29,7 +29,7 @@ import {
 import { createProbeGate, listDirectory, messageOf, parentOf, requireAbsolute, rootLabel, type SidebarFsEntry } from './fs-tree.ts'
 import { resolveSessionPath } from './session-path.ts'
 import { createWorkspaceFile, mkdirWorkspaceEntry, renameWorkspaceEntry, removeWorkspaceEntry, writeWorkspaceText, writeWorkspaceUpload } from './fs-operations.ts'
-import { ensureWorkspacePath } from './path-security.ts'
+import { resolveTarget } from './path-security.ts'
 import { searchFiles } from './fs-search.ts'
 import { pairedFileApi } from './paired-files.ts'
 import { compileExcludePatterns } from './exclude-patterns.ts'
@@ -51,7 +51,8 @@ import { createAssistantLiveBuffer, type AssistantLiveBuffer } from './assistant
 import { readSidechatImage } from './sidechat-routes.ts'
 import { SIDECHAT_METADATA_BYTES, sidechatPromptBodyLimit } from './sidechat-image-admission.ts'
 import { readJsonBody, readTextBody, requireString, SidebarError, writeError, writeJson, writeOk } from './wire.ts'
-import { streamFileToResponse } from './file-stream.ts'
+import { byteRangeOf, streamFileToResponse } from './file-stream.ts'
+import { fileReadError } from './fs-read-error.ts'
 import { createChangesOpsApi } from './changes-ops.ts'
 import { BlockAssembler, createUserMessage, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import {
@@ -138,6 +139,23 @@ const MEDIA_TYPES: Record<string, string> = {
   '.ttf': 'font/ttf',
   '.otf': 'font/otf',
   '.wasm': 'application/wasm',
+  // Media containers: `<video>` / `<audio>` pick their demuxer from this
+  // header, so a media file answered as octet-stream is a coin flip even when
+  // the browser can decode it. `.ogg` is audio on purpose — a Theora video in
+  // Ogg is vanishingly rare next to Vorbis/Opus audio.
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.webm': 'video/webm',
+  '.ogv': 'video/ogg',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.wav': 'audio/wav',
+  '.flac': 'audio/flac',
+  '.ogg': 'audio/ogg',
+  '.oga': 'audio/ogg',
+  '.opus': 'audio/ogg',
 }
 
 /** Content type served by /sidebar/file and /sidebar/html; unknowns use a binary-safe fallback. */
@@ -272,12 +290,12 @@ function requireLineNumber(payload: unknown, key: string): number {
 }
 
 /**
- * Resolve a relative path an EDITOR surface carried (the file tree, the
- * editor buffer, and `fs.read`, which the untracked-diff fallback reads
- * through): the session-relative interpretation wins when it names an
- * existing path, with the repository root as the fallback. Git's
- * status/diff ROWS deliberately do NOT come through here — they are
- * repository-root-relative by construction, see {@link resolveStatusPath}.
+ * Resolve a path a GIT surface carried (git.blame, git.diff-head): the
+ * session-relative interpretation wins when it names an existing path, with
+ * the repository root as the fallback — git's own paths are repo-root
+ * relative, so the root is a real fallback here, never a silent one for a
+ * missing session file. File links do NOT come through here: `fs.read` and
+ * `fs.readPage` resolve from the session cwd only, missing is missing.
  */
 async function resolveGitPath(cwd: string, raw: string, selected?: string): Promise<string> {
   if (isAbsolute(raw)) return requireAbsolute(resolveSessionPath(cwd, raw))
@@ -480,11 +498,7 @@ const READ_HEAD_LIMIT = 4096
  */
 async function statFileForRoute(path: string): Promise<Stats> {
   return await stat(path).catch((error: unknown) => {
-    throw new SidebarError(
-      'fs-error',
-      `cannot read "${path}": ${error instanceof Error ? error.message : String(error)}`,
-      400,
-    )
+    throw fileReadError(path, error)
   })
 }
 
@@ -516,15 +530,18 @@ export type SidebarReadResult =
  */
 async function readText(path: string): Promise<SidebarReadResult> {
   const info = await stat(path).catch((error: unknown) => {
-    throw new SidebarError('fs-error', `cannot read "${path}": ${error instanceof Error ? error.message : String(error)}`, 400)
+    throw fileReadError(path, error)
   })
   if (info.isDirectory()) {
-    throw new SidebarError('fs-error', `"${path}" is a directory`, 400)
+    // A dedicated code, not a generic fs failure: the client promotes the tab
+    // to the plugin's folder window instead of rendering this as an error (a
+    // chat folder link, a sidebar_open folder, a pasted directory path).
+    throw new SidebarError('fs-directory', `"${path}" is a directory`, 400)
   }
   const size = info.size
   const oversized = size > MAX_EDITABLE_BYTES
   const handle = await open(path, 'r').catch((error: unknown) => {
-    throw new SidebarError('fs-error', `cannot read "${path}": ${error instanceof Error ? error.message : String(error)}`, 400)
+    throw fileReadError(path, error)
   })
   try {
     // An over-limit file still yields its first bytes: that is what decides
@@ -602,10 +619,10 @@ interface ReadPageResult {
  */
 async function readPage(path: string, offset: number): Promise<ReadPageResult> {
   const info = await stat(path).catch((error: unknown) => {
-    throw new SidebarError('fs-error', `cannot read "${path}": ${error instanceof Error ? error.message : String(error)}`, 400)
+    throw fileReadError(path, error)
   })
   if (info.isDirectory()) {
-    throw new SidebarError('fs-error', `"${path}" is a directory`, 400)
+    throw new SidebarError('fs-directory', `"${path}" is a directory`, 400)
   }
   const size = info.size
   if (offset >= size) {
@@ -621,7 +638,7 @@ async function readPage(path: string, offset: number): Promise<ReadPageResult> {
     }
   }
   const handle = await open(path, 'r').catch((error: unknown) => {
-    throw new SidebarError('fs-error', `cannot read "${path}": ${error instanceof Error ? error.message : String(error)}`, 400)
+    throw fileReadError(path, error)
   })
   try {
     const length = Math.min(PAGE_BYTES, size - offset)
@@ -790,7 +807,7 @@ function buildApi(
     'fs.tree': async (payload) => {
       const { cwd } = await cwdOf(payload)
       const record = payload as { path?: unknown; exclude?: unknown }
-      const target = record.path === undefined ? cwd : await ensureWorkspacePath(cwd, requireString(payload, 'path'))
+      const target = record.path === undefined ? cwd : resolveTarget(cwd, requireString(payload, 'path'))
       // The client's explorerExclude pref rides the request (compiled here so
       // the listing and the singleton fold probe share one matcher).
       const exclude = compileExcludePatterns(record.exclude, cwd)
@@ -834,7 +851,7 @@ function buildApi(
         const homeRelative = raw === '~' || raw.startsWith('~/') || raw.startsWith('~\\')
         const requested = isAbsolute(raw) || homeRelative ? raw : `${cwd}${sep}${raw}`
         try {
-          return await listDirectory(await ensureWorkspacePath(cwd, requested), resolved.listLimit, exclude, gate)
+          return await listDirectory(resolveTarget(cwd, requested), resolved.listLimit, exclude, gate)
         } catch (error) {
           // Per-level failure: the batch itself stays a success (one unreadable
           // directory must not blank the whole tree).
@@ -858,12 +875,11 @@ function buildApi(
     },
     'fs.read': async (payload) => {
       const { cwd } = await cwdOf(payload)
-      // Relative paths are git-derived (status/diff report repo-root-relative
-      // names; the untracked diff view reads the file through this route). A
-      // child-repo path is relative to the selected repoRoot, not the session
-      // cwd; thread it so the path resolves inside the authorized workspace.
+      // File links are session-relative. Git callers must provide an absolute
+      // path or explicitly select a repository; missing files never change base.
       const selected = selectedRepoOf(payload)
-      const path = await ensureWorkspacePath(cwd, await resolveGitPath(cwd, requireString(payload, 'path'), selected))
+      const base = selected === undefined ? cwd : await git.repoRoot(cwd, selected)
+      const path = resolveTarget(base, requireString(payload, 'path'))
       return await readText(path)
     },
     // One byte window of a large text file, for the read-only paged preview.
@@ -873,7 +889,8 @@ function buildApi(
     'fs.readPage': async (payload) => {
       const { cwd } = await cwdOf(payload)
       const selected = selectedRepoOf(payload)
-      const path = await ensureWorkspacePath(cwd, await resolveGitPath(cwd, requireString(payload, 'path'), selected))
+      const base = selected === undefined ? cwd : await git.repoRoot(cwd, selected)
+      const path = resolveTarget(base, requireString(payload, 'path'))
       const record = payload as { offset?: unknown } | null
       const offset = typeof record?.offset === 'number' && Number.isFinite(record.offset) && record.offset >= 0
         ? Math.floor(record.offset)
@@ -949,7 +966,7 @@ function buildApi(
     'git.diff-head': async (payload) => {
       const { cwd } = await gitCwdOf(payload)
       const repoRoot = selectedRepoOf(payload)
-      const path = await ensureWorkspacePath(cwd, await resolveGitPath(cwd, requireString(payload, 'path'), repoRoot))
+      const path = resolveTarget(cwd, await resolveGitPath(cwd, requireString(payload, 'path'), repoRoot))
       return { diff: await git.diffHead(cwd, path, repoRoot) }
     },
     'git.stage': async (payload) => {
@@ -1067,7 +1084,7 @@ function buildApi(
     'git.blame': async (payload) => {
       const { cwd } = await gitCwdOf(payload)
       const repoRoot = selectedRepoOf(payload)
-      const path = await ensureWorkspacePath(cwd, await resolveGitPath(cwd, requireString(payload, 'path'), repoRoot))
+      const path = resolveTarget(cwd, await resolveGitPath(cwd, requireString(payload, 'path'), repoRoot))
       const startLine = requireLineNumber(payload, 'startLine')
       const endLine = requireLineNumber(payload, 'endLine')
       if (endLine < startLine) throw new SidebarError('bad-request', '"endLine" must not precede "startLine"')
@@ -1238,8 +1255,8 @@ function buildApi(
       if (action === 'url') return launchExternal('url', requireString(payload, 'url'))
       throw new SidebarError('bad-request', 'action must be "reveal" or "url"')
     },
-    // Archive builds: fence the selection and hand the packing to the
-    // background task table, which runs the system's zip/tar into a temp file.
+    // Archive builds: resolve the selection lexically and hand the packing to
+    // the background task table, which runs the system's zip/tar into a temp file.
     // The tree watches it through `archive.status` and downloads the finished
     // bytes from GET /sidebar/archive?id=.
     //
@@ -1256,7 +1273,7 @@ function buildApi(
       if (paths.length === 0) throw new SidebarError('bad-request', 'paths must be a non-empty array')
       const name = typeof record?.name === 'string' ? record.name : ''
       const selected: string[] = []
-      for (const raw of paths) selected.push(await ensureWorkspacePath(cwd, raw))
+      for (const raw of paths) selected.push(resolveTarget(cwd, raw))
       return await archiveTasks.start({ sessionId, name, paths: selected })
     },
     'archive.status': (payload) =>
@@ -1268,7 +1285,7 @@ function buildApi(
     // identities are fenced from the generic session RPCs (agent-lookup
     // ownership), and the thread is created with a CUSTOM seed the stock
     // fork APIs cannot express.
-    ...buildSidechatApi(ctx, assistantLive, sidechatSignal),
+    ...buildSidechatApi(ctx, assistantLive, resolved, sidechatSignal),
   }
 }
 
@@ -1782,7 +1799,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
 
   // ── Archive routes (zip one selection, watch it build, download it) ─────
   // The file tree's "zip and download" action is a three-step flow: POST
-  // `archive.build` fences every `path` through the SAME workspace fence as
+  // `archive.build` resolves every `path` through the same lexical resolver as
   // fs.tree / /sidebar/file and returns an id IMMEDIATELY; the system's zip
   // (or tar) packs the selection into a temp file in the background, reported
   // through `archive.status`; and GET /sidebar/archive STREAMS the finished
@@ -1834,27 +1851,35 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         if (sessionId === null || raw === null) throw new SidebarError('bad-request', 'sessionId and path are required')
         const cwd = await activeWorktreeRootOf(ctx, sessionId, await sessionCwdOf(ctx, sessionId, url.searchParams.get('cwd') ?? undefined))
         const paired = await pairedFileApi(ctx, 'fs.bytes', { sessionId, path: raw }, req)
-        const path = paired === undefined ? await ensureWorkspacePath(cwd, raw) : raw
+        const path = paired === undefined ? resolveTarget(cwd, raw) : raw
         const type = mediaTypeForPath(path)
         // Raw bytes either way (binary-safe); ?download=1 switches the
         // disposition so the browser saves the file instead of showing it.
-        const headers: Record<string, string> = { 'content-type': type, 'cache-control': 'no-cache' }
-        // An SVG is a scriptable DOCUMENT, not an inert image: navigating to
-        // this URL directly would run its <script> in the GUI's origin, with
-        // same-origin access to /sidebar/api/*. The sibling html route already
-        // sandboxes for exactly this reason; mirror it here. The CSP applies
-        // to the document, so <img src> embedding is unaffected.
-        if (type === 'image/svg+xml') {
-          headers['content-security-policy'] = "sandbox; object-src 'none'"
-          headers['x-content-type-options'] = 'nosniff'
-          headers['referrer-policy'] = 'no-referrer'
+        // Only scriptable DOCUMENT types get an opaque-origin CSP. An inert
+        // image/binary keeps its existing response surface: the CSP sandbox
+        // does nothing for an <img>, and a directly opened image must not gain
+        // a needless behaviour change. nosniff + no-referrer are safe everywhere.
+        const documentType = type === 'text/html' || type === 'application/xhtml+xml' || type === 'image/svg+xml'
+        const headers: Record<string, string> = {
+          'content-type': type,
+          'cache-control': 'no-cache',
+          // Advertised on every media response: a media element asks for
+          // `bytes=0-` first, and only a 206 tells it that seeking is a byte
+          // question rather than "download the rest and hope".
+          'accept-ranges': 'bytes',
+          'x-content-type-options': 'nosniff',
+          'referrer-policy': 'no-referrer',
+        }
+        if (documentType) {
+          headers['content-security-policy'] = type === 'image/svg+xml'
+            ? "sandbox; object-src 'none'"
+            : "sandbox allow-scripts allow-popups allow-downloads allow-modals; object-src 'none'"
         }
         if (url.searchParams.get('download') === '1') {
           headers['content-disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(basename(path))}`
         }
-        // Streamed, not buffered: there is no size gate left, and the host's
-        // memory stays flat whatever the file weighs (see file-stream.ts).
-        await serveAccountFile(path, paired, res, headers)
+        const rawRange = req.headers.range
+        await serveAccountFile(path, paired, res, headers, typeof rawRange === 'string' ? rawRange : undefined)
       } catch (error) {
         writeError(res, error)
       }
@@ -1867,16 +1892,36 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
     paired: { value: unknown } | undefined,
     res: Parameters<typeof streamFileToResponse>[2],
     headers: Record<string, string>,
+    rangeHeader?: string,
   ): Promise<void> {
-    if (paired !== undefined) {
-      if (!Buffer.isBuffer(paired.value)) throw new SidebarError('fs-error', 'paired file response is not bytes', 502)
-      res.writeHead(200, headers)
-      res.end(paired.value)
+    const bytes = paired?.value
+    if (paired !== undefined && !Buffer.isBuffer(bytes)) {
+      throw new SidebarError('fs-error', 'paired file response is not bytes', 502)
+    }
+    const info = paired === undefined ? await statFileForRoute(path) : undefined
+    if (info !== undefined && !info.isFile()) throw new SidebarError('fs-error', 'not a file', 400)
+    const size = info?.size ?? (Buffer.isBuffer(bytes) ? bytes.length : 0)
+    const range = byteRangeOf(rangeHeader, size)
+    if (range === 'unsatisfiable') {
+      res.writeHead(416, { ...headers, 'content-range': `bytes */${size}` })
+      res.end()
       return
     }
-    const info = await statFileForRoute(path)
-    if (!info.isFile()) throw new SidebarError('fs-error', 'not a file', 400)
-    await streamFileToResponse(path, info.size, res, headers)
+    if (!Buffer.isBuffer(bytes)) {
+      await streamFileToResponse(path, size, res, headers, range)
+      return
+    }
+    if (range === undefined) {
+      res.writeHead(200, { ...headers, 'content-length': String(size) })
+      res.end(bytes)
+      return
+    }
+    res.writeHead(206, {
+      ...headers,
+      'content-range': `bytes ${range.start}-${range.end}/${size}`,
+      'content-length': String(range.end - range.start + 1),
+    })
+    res.end(bytes.subarray(range.start, range.end + 1))
   }
 
   // ── HTML preview route (sandboxed HTML + its relative assets) ───────────
@@ -1918,7 +1963,7 @@ export function apply(ctx: Context, config?: SidebarConfig): void {
         // fallback.
         const cwd = await activeWorktreeRootOf(ctx, sessionId, await sessionCwdOf(ctx, sessionId))
         const paired = await pairedFileApi(ctx, 'fs.bytes', { sessionId, path }, req)
-        const absolute = paired === undefined ? await ensureWorkspacePath(cwd, path) : path
+        const absolute = paired === undefined ? resolveTarget(cwd, path) : path
         const type = mediaTypeForPath(absolute)
         await serveAccountFile(absolute, paired, res, {
           'content-type': type === 'text/html' ? 'text/html; charset=utf-8' : type,
@@ -2091,7 +2136,7 @@ async function handleFsWatchFrame(
   if (path === undefined || path === '') return
   try {
     const cwd = await activeWorktreeRootOf(ctx, sessionId, await sessionCwdOf(ctx, sessionId))
-    const dir = await ensureWorkspacePath(cwd, path)
+    const dir = resolveTarget(cwd, path)
     if (frame.op === 'unwatch') {
       watchers.remove(dir)
       return

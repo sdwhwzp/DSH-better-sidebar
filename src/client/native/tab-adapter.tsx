@@ -24,7 +24,7 @@
  * activation and handed to every registration.
  */
 import { createElement, useEffect, useSyncExternalStore } from 'react'
-import type { ComponentType, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import type { Context } from '../../context-types.ts'
 import type { SessionScope } from '../api.ts'
 import { RenderBoundary } from '../RenderBoundary.tsx'
@@ -629,11 +629,16 @@ export function NativeTabTitle(props: NativeTitleInjected & NativeBodyFrameworkP
     () => records.versionOf(sessionId, nativeTab.id),
   )
   const record = records.get(sessionId, nativeTab.id)
-  const title = record?.tab.title ?? nativeTab.title
   // `version` is read so a title/path/meta mutation re-renders the chip; the
   // icon itself is derived from the record, never stored.
   void version
   const descriptor = service.getTab(descriptorId) ?? service.getTab(record?.tab.type ?? nativeTab.kind)
+  // A single page's title is its type's, read from the registry at render
+  // time: an open tab follows a renamed panel instead of keeping the title
+  // captured when it opened (the record and native tab both store that one).
+  const title = descriptor?.single === true
+    ? (typeof descriptor.title === 'function' ? descriptor.title() : descriptor.title)
+    : record?.tab.title ?? nativeTab.title
   // The record's own path wins (an in-place switch stores it there, and the
   // native address of a page kind cannot carry it); the address-derived path
   // is what keeps the glyph correct when the record is not there YET (the tab
@@ -691,10 +696,4 @@ function UnreadDot(): ReactNode {
       title={t('tabUnread')}
     />
   )
-}
-
-/** The component pair one descriptor contributes to the native surface. */
-export interface NativeTabComponents {
-  readonly body: ComponentType<NativeBodyInjected & NativeBodyFrameworkProps>
-  readonly title: ComponentType<NativeTitleInjected & NativeBodyFrameworkProps>
 }

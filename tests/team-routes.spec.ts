@@ -11,9 +11,9 @@
  * `remoteView` vocabulary this suite used to lock down no longer exists in the
  * service — that is the drift this file now guards against.
  *
- * The plugin never imports the experimental package; the fake service here is
+ * The plugin never imports the Team package; the fake service here is
  * a structural double whose method names and rejection shapes mirror
- * `@deepseek-ai/dsh-agent-team@0.2.2-rc.1`'s `TeamService`.
+ * `@deepseek-ai/dsh-agent-team@0.2.2-rc.2`'s `TeamService`.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { buildTeamsApi } from '../src/team-routes.ts'
@@ -62,11 +62,27 @@ describe('teams.taskCreate route', () => {
     )
   })
 
-  it('degrades to 503 when the experimental layer is absent', async () => {
+  it('degrades to 503 when the Team layer is absent', async () => {
     const api = buildTeamsApi(ctxWith(undefined, agentsWithRoot()))
     await expect(api.taskCreate({ rootSessionId: 'root', subject: 's' })).rejects.toThrowError(
       expect.objectContaining({ code: 'team-error', status: 503 }),
     )
+  })
+
+  it('re-reads the layer per request so a late mount is picked up (#1148)', async () => {
+    // The routes are built once at plugin apply; the Team layer may mount
+    // afterwards. Capturing `ctx.get('agentTeams')` at build time pins the
+    // 503 forever even though the service is live by the time the user
+    // submits the form.
+    const mounted: { teams?: { isEnabled: (agent: unknown) => boolean; createTask: (agent: unknown, req: unknown) => Promise<unknown> } } = {}
+    const ctx = {
+      get: (key: string) => (key === 'agentTeams' ? mounted.teams : key === 'agents' ? agentsWithRoot() : undefined),
+    } as unknown as Context
+    const api = buildTeamsApi(ctx)
+    const created = task({ id: 'task-late' })
+    mounted.teams = { isEnabled: vi.fn(() => true), createTask: vi.fn(async () => created) }
+    await expect(api.taskCreate({ rootSessionId: 'root', subject: '晚挂载' }))
+      .resolves.toEqual({ ok: true, value: created })
   })
 
   it('degrades to 404 when the root agent is not live in this process', async () => {
@@ -78,7 +94,7 @@ describe('teams.taskCreate route', () => {
     expect(teams.createTask).not.toHaveBeenCalled()
   })
 
-  it('degrades to 404 when Team mode is disabled', async () => {
+  it('degrades to 404 when isEnabled is false (Agent Teams disabled for the tree)', async () => {
     const teams = { isEnabled: vi.fn(() => false), createTask: vi.fn() }
     const api = buildTeamsApi(ctxWith(teams, agentsWithRoot()))
     await expect(api.taskCreate({ rootSessionId: 'root', subject: 's' })).rejects.toThrowError(

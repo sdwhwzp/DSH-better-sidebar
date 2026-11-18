@@ -1,8 +1,8 @@
 import './browser-globals.ts'
 import { describe, expect, it } from 'vitest'
 import { decodeHtmlUrl } from '../src/html-route.ts'
-import { isAbsolutePath, relativeTo, workspaceRelativePath } from '../src/client/paths.ts'
-import { resolveSidebarPath } from '../src/client/paths.ts'
+import { isAbsolutePath, isWithinWorkspace, relativeTo, workspaceRelativePath } from '../src/client/paths.ts'
+import { resolveNativeSidebarPath, resolveSidebarPath } from '../src/client/paths.ts'
 import { downloadUrl, htmlUrl, mediaUrl } from '../src/client/api.ts'
 
 describe('path helpers', () => {
@@ -43,6 +43,20 @@ describe('path helpers', () => {
     expect(resolveSidebarPath('C:\\work\\proj\\', 'C:\\abs\\x.ts')).toBe('C:\\abs\\x.ts')
   })
 
+  it('normalizes a folder root to the cwd separator dialect (#1029)', () => {
+    // A chat file address is `/`-separated and session-relative; the host keys
+    // listings by path.resolve'd absolute paths, so the folder root the tree
+    // requests must speak the same dialect or it never matches its level.
+    expect(resolveNativeSidebarPath('C:\\work\\proj', 'src/a.ts')).toBe('C:\\work\\proj\\src\\a.ts')
+    // path.resolve drops a trailing separator; the helper mirrors that (a
+    // drive root keeps it).
+    expect(resolveNativeSidebarPath('C:\\work\\proj\\', 'src/a.ts/')).toBe('C:\\work\\proj\\src\\a.ts')
+    expect(resolveNativeSidebarPath('C:\\work\\proj', 'C:\\')).toBe('C:\\')
+    // POSIX keeps the plain join: a backslash is a legal filename character.
+    expect(resolveNativeSidebarPath('/home/me/proj', 'src/a.ts')).toBe('/home/me/proj/src/a.ts')
+    expect(resolveNativeSidebarPath(undefined, 'src/a.ts')).toBe('src/a.ts')
+  })
+
   it('keeps UNC produced paths absolute instead of joining them onto the cwd', () => {
     // Pure client function: UNC detection is platform-independent, so these
     // assertions run on every host without a platform guard.
@@ -63,6 +77,28 @@ describe('path helpers', () => {
     expect(isAbsolutePath('//server/share/x.ts')).toBe(true)
     expect(isAbsolutePath('C:relative.ts')).toBe(false)
     expect(isAbsolutePath('rel/x.ts')).toBe(false)
+  })
+
+  it('isWithinWorkspace tolerates separators and letter case on every platform', () => {
+    expect(isWithinWorkspace('/work/proj', '/work/proj/src/a.ts')).toBe(true)
+    expect(isWithinWorkspace('/work/proj', '/work/proj')).toBe(true)
+    expect(isWithinWorkspace('/work/proj', '/work/proj2/a.ts')).toBe(false)
+    expect(isWithinWorkspace('/work/proj', '/other/a.ts')).toBe(false)
+    // Mixed separators normalize on every platform.
+    expect(isWithinWorkspace('C:\\Users\\me', 'C:/Users/me/src/a.ts')).toBe(true)
+    // The live helper is case-insensitive on every platform by design: the
+    // volume may report different casing than the cwd row, and the decision
+    // must not depend on it.
+    expect(isWithinWorkspace('/Users/Me', '/users/me/file.png')).toBe(true)
+    expect(isWithinWorkspace('C:\\Users\\Me', 'c:/users/me/file.png')).toBe(true)
+    // Windows drive-root containment.
+    expect(isWithinWorkspace('C:\\', 'C:\\Users\\me\\a.png')).toBe(true)
+    expect(isWithinWorkspace('c:\\users', 'C:/USERS/me/b.png')).toBe(true)
+    // UNC network-share containment: the '//' share prefix must not defeat
+    // the prefix test, and a sibling share must stay outside.
+    expect(isWithinWorkspace('\\\\server\\share\\proj', '\\\\server\\share\\proj\\src\\a.ts')).toBe(true)
+    expect(isWithinWorkspace('\\\\server\\share\\proj', '\\\\server\\share\\proj2\\a.ts')).toBe(false)
+    expect(isWithinWorkspace('\\\\server\\share\\proj', '\\\\other\\share\\a.ts')).toBe(false)
   })
 
   it('treats ~ as home-absolute, never a session-relative path (#713)', () => {

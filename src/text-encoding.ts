@@ -356,7 +356,7 @@ export function lastLineBreakEnd(bytes: Buffer, encoding: TextEncoding): number 
  *
  * BOM handling stays with the caller: `*-bom` encodings describe the file's
  * first bytes, so a caller reading from a non-zero offset should pass the
- * BOM-less spelling (see `bomlessEncoding`).
+ * BOM-less spelling (`utf8` / `utf16le` / `utf16be`).
  *
  * @param bytes - the window to decode (already known to be text).
  * @param encoding - the encoding the first window established.
@@ -385,28 +385,15 @@ export function decodeTextAs(bytes: Buffer, encoding: TextEncoding): string {
   }
 }
 
-/**
- * The same encoding minus its BOM marker, for windows that do not start at the
- * beginning of the file (only offset 0 can carry a BOM).
- *
- * @param encoding - an encoding an earlier window detected.
- * @returns the BOM-less spelling (unchanged for encodings that have none).
- */
-export function bomlessEncoding(encoding: TextEncoding): TextEncoding {
-  switch (encoding) {
-    case 'utf8-bom': return 'utf8'
-    case 'utf16le-bom': return 'utf16le'
-    case 'utf16be-bom': return 'utf16be'
-    default: return encoding
-  }
-}
-
 let gbkEncodeMap: Map<string, number> | undefined
 function getGbkEncodeMap(): Map<string, number> {
   if (gbkEncodeMap !== undefined) return gbkEncodeMap
   const map = new Map<string, number>()
   for (let byte = 0; byte <= 0x7f; byte += 1) map.set(String.fromCharCode(byte), byte)
-  map.set('€', 0x80)
+  // GBK has a legacy single-byte euro at 0x80, but WHATWG/ICU (Node 24.21's
+  // ICU 78, and current Chromium) reject it as invalid under `fatal: true`.
+  // The canonical two-byte GBK spelling decodes everywhere.
+  map.set('€', 0xa2e3)
   for (let lead = 0x81; lead <= 0xfe; lead += 1) {
     for (let trail = 0x40; trail <= 0xfe; trail += 1) {
       if (trail === 0x7f) continue
